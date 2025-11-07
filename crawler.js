@@ -5,11 +5,18 @@ const targetURl = "https://en.wikipedia.org/wiki/Iliad"
 const urlsToVisit = [targetURl] //unvisited urls.
 let currentVisitetAmount = 0
 
+const delay = (delayInms) => {
+  return new Promise(resolve => setTimeout(resolve, delayInms));
+};
+
 async function spider() {   
 
     while (currentVisitetAmount < urlsToVisit.length){
-        const currentUrl = urlsToVisit[currentVisitetAmount];
-        currentVisitetAmount++ 
+        //setTimeout(async () => {
+            await delay(1000);
+
+            const currentUrl = urlsToVisit[currentVisitetAmount];
+            currentVisitetAmount++ 
 
         try {
             console.log("currently visting", currentUrl)
@@ -44,8 +51,11 @@ async function spider() {
         }
 
         console.log(urlsToVisit)
+
+        //}, 1);
     }; 
     
 }
+
 
 spider();
