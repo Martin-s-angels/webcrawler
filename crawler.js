@@ -2,13 +2,38 @@ import 'dotenv/config'
 import fs from 'fs'
 import { load } from 'cheerio'
 import db from './db/connection.js'
+import { url } from 'inspector';
 
 const urlsToVisit = new Set();
-let currentVisitetAmount = 0
+const visitedUrls = new Set();
+
+const robotsCache = new Map();
+
+const MAX_DEPTH = 2;
+
+const MAX_PAGES = 500;
+let pagesCrawled = 0;
 
 const delay = (delayInms) => {
     return new Promise(resolve => setTimeout(resolve, delayInms));
 };
+
+
+async function isAllowedByRobots(url) {
+    const { origin, pathname } = new URL(url);
+
+    if (!robotsCache.has(origin)) {
+        try {
+            const res = await fetch(`${origin}/robots.txt`);
+            robotsCache.set(origin, res.ok ? await res.text() : '');
+        } catch {
+            robotsCache.set(origin, '');
+        }
+    }
+
+    const robots = robotsCache.get(origin);
+    return !robots.includes(`Disallow: ${pathname}`);
+}
 
 async function spider() {
 
@@ -32,18 +57,44 @@ async function spider() {
         }
     }
 
-    while (currentVisitetAmount < urlsArray.length) {
+    const urlsQueue = [...urlsToVisit].map(url => ({
+        url,
+        depth: 0
+    }));
 
-        const urlsArray = [...urlsToVisit];
 
-        const currentUrl = urlsArray[currentVisitetAmount];
+
+    while (urlsQueue.length > 0) {
+
+
+        const { url: currentUrl, depth } = urlsQueue.shift();
+
+        pagesCrawled++;
+        if (depth > MAX_DEPTH) {
+            console.warn('ERROR: depth exceeded!', depth, currentUrl);
+            continue;
+        }
+
+
+        visitedUrls.add(currentUrl);
 
         await delay(1000);
 
         try {
-            console.log("currently visting", currentUrl)
-            const response = await fetch(currentUrl)
+            if (!(await isAllowedByRobots(currentUrl))) continue; //respect robot 
+
+            const response = await fetch(currentUrl, {
+                headers: {
+                    'User-Agent': 'MyEducationalCrawler/1.0'
+                }
+            });
             const result = await response.text();
+
+
+            if (pagesCrawled >= MAX_PAGES) {
+                console.log('Max pages reached, stopping crawl');
+                break;
+            }
 
             fs.writeFileSync("index.html", result);
             const htmlPageString = fs.readFileSync("index.html").toString();
@@ -55,8 +106,10 @@ async function spider() {
                 $('#mw-content-text').text().trim() ||
                 $('body').text().trim();
 
+            const currentOrigin = new URL(currentUrl).origin;
+
             // find all links on the page
-            const linkElements = $('a[href]');
+            const linkElements = $('a[href]').slice(0, 30);
             linkElements.each((index, element) => {
                 let url = $(element).attr('href');
 
@@ -64,30 +117,40 @@ async function spider() {
                     url = new URL(url, currentUrl).href;
                 }
 
-                if (url.startsWith(currentUrl) && !url.includes('#') && !url.endsWith(".jpg") && !urlsArray.includes(url)) {
-                    urlsToVisit.add(url);
+                if (url.startsWith(currentOrigin) && !url.includes('#') && !url.endsWith(".jpg") && !visitedUrls.has(url) && !urlsQueue.some(item => item.url === url)) {
+                    if(depth + 1 <= MAX_DEPTH){
+                        urlsQueue.push({
+                            url,
+                            depth: depth + 1
+                        });
+                    }   
                 }
             })
 
-            await db.query(
-                `INSERT INTO pages (title , url, language, last_updated, content)
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (url) DO UPDATE SET
-                    title = EXCLUDED.title,
-                    language = EXCLUDED.language,
-                    last_updated = EXCLUDED.last_updated,
-                    content = EXCLUDED.content`,
-                [title, currentUrl, language, new Date().toISOString(), content]
-            )
+            const inDB = await db.query(`SELECT * FROM pages where url = $1`, [currentUrl])
+
+            if (inDB.rows.length === 0) {
+                await db.query(
+                    `INSERT INTO pages (title , url, language, last_updated, content)
+                    VALUES ($1, $2, $3, $4, $5)`,
+                    [title, currentUrl, language, new Date().toISOString(), content]
+                )
+            } else {
+                await db.query(`UPDATE pages set last_updated = $1 where url = $2`, [new Date().toISOString(), currentUrl])
+            }
 
         } catch (error) {
             console.error("Failed to crawl:", currentUrl, error)
         }
 
-        console.log(urlsToVisit)
-
-        currentVisitetAmount++
+        console.log(`VISITING url= ${currentUrl}, VISITING depth=${depth}, queue size=${urlsQueue.length}`);
+        
     };
+
+    for (const row of searchTerms) {
+        await db.query(`delete FROM pages_not_found where id = $1`, [row.id])
+    }
+
 
 }
 
