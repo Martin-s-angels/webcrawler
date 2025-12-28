@@ -2,7 +2,7 @@ import 'dotenv/config'
 import fs from 'fs'
 import { load } from 'cheerio'
 import db from './db/connection.js'
-import { url } from 'inspector';
+
 
 const urlsToVisit = new Set();
 const visitedUrls = new Set();
@@ -154,4 +154,4 @@ async function spider() {
 
 }
 
-spider();
+export default spider;
