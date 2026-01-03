@@ -36,8 +36,8 @@ async function isAllowedByRobots(url) {
 }
 
 async function spider() {
-
-    const request = await db.query(`SELECT * FROM pages_not_Found ORDER BY id LIMIT 100`)
+    console.log("sider Startet ? ")
+    const request = await db.query(`SELECT * FROM pages_not_Found ORDER BY id LIMIT 10`)
 
 
     const searchTerms = request.rows
@@ -109,7 +109,7 @@ async function spider() {
             const currentOrigin = new URL(currentUrl).origin;
 
             // find all links on the page
-            const linkElements = $('a[href]').slice(0, 30);
+            const linkElements = $('a[href]').slice(0, 5);
             linkElements.each((index, element) => {
                 let url = $(element).attr('href');
 
@@ -153,5 +153,7 @@ async function spider() {
 
 
 }
+
+spider();
 
 export default spider;
