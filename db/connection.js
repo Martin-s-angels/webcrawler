@@ -5,7 +5,7 @@ const { Pool } = pg
 const prod = process.argv.includes('prod')
 let connectionString
 
-const ssl = { rejectUnauthorized: false }
+const ssl = false
 
 if (prod) {
   connectionString = process.env.DB_URI_PROD
